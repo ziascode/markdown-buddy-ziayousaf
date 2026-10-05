@@ -1,0 +1,208 @@
+---
+title: "Script Documentation: sales_summary.R"
+author: "Zia Yousaf"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    theme: flatly
+    highlight: tango
+---
+
+> **AI Assistance Declaration**: I used Claude (Anthropic, Claude Opus 5.5, October 4, 2026) for layout suggestions, Markdown formatting, and writing assistance on this document. Prompts used: "Here's my R script description. Suggest Markdown formatting and code block examples."; "Add syntax highlighting and improve section organization (e.g., # Purpose, ## Inputs, ## Outputs)."; "Is the Markdown consistent with RMarkdown best practices?" (full text and responses are in `Appendix.md`). I verified outputs using a full knit of this file in RStudio and a section by section review of the rendered HTML. All final calculations are done by myself. I am responsible for the accuracy and originality of this work.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 5,
+  fig.align = "center"
+)
+```
+
+# Purpose
+
+This document explains `scripts/sales_summary.R`, the main script in the **markdown-buddy-ziayousaf** repository. The script:
+
+1. Simulates a synthetic retail sales dataset.
+2. Cleans the data and calculates revenue for each order.
+3. Summarises orders, units, and revenue by region and product category.
+4. Plots total revenue by region and category.
+5. Saves the summary table and the chart to the `output/` folder.
+
+No real or personal data is used. Every value is generated inside the script, and a fixed seed makes the results reproducible.
+
+## Inputs
+
+The script does not read any external files. Its behaviour is controlled by three settings at the top of the script.
+
+| Setting      | Type      | Default    | Description                                    |
+|:-------------|:----------|:-----------|:-----------------------------------------------|
+| `seed_value` | integer   | `400`      | Seed for the random number generator           |
+| `n_orders`   | integer   | `500`      | Number of synthetic orders to simulate         |
+| `output_dir` | character | `"output"` | Folder where the result files are written      |
+
+### Required packages
+
+```{r packages}
+library(dplyr)
+library(ggplot2)
+```
+
+If a package is missing, install it once from the console:
+
+```{r install, eval=FALSE}
+install.packages(c("dplyr", "ggplot2", "rmarkdown", "knitr"))
+```
+
+## Outputs
+
+| File                           | Format | Description                                         |
+|:-------------------------------|:-------|:----------------------------------------------------|
+| `output/regional_summary.csv`  | CSV    | One row per region and category with summary values |
+| `output/revenue_by_region.png` | PNG    | Grouped bar chart of total revenue                  |
+
+The summary table contains these columns:
+
+- `region`: sales region (East, West, North, South)
+- `category`: product category (Electronics, Home, Clothing)
+- `orders`: number of orders
+- `total_units`: units sold
+- `total_revenue`: sum of `units * unit_price`
+- `avg_order_value`: mean revenue per order
+
+# Walkthrough
+
+## Step 1: Settings
+
+```{r settings}
+seed_value <- 400
+n_orders   <- 500
+output_dir <- "output"
+```
+
+## Step 2: Simulate the synthetic dataset
+
+`set.seed()` guarantees that the same data is generated on every run.
+
+```{r simulate}
+set.seed(seed_value)
+
+sales <- tibble(
+  order_id   = seq_len(n_orders),
+  order_date = sample(
+    seq(as.Date("2025-01-01"), as.Date("2025-12-31"), by = "day"),
+    n_orders,
+    replace = TRUE
+  ),
+  region     = sample(c("East", "West", "North", "South"), n_orders, replace = TRUE),
+  category   = sample(c("Electronics", "Home", "Clothing"), n_orders, replace = TRUE),
+  units      = sample(1:10, n_orders, replace = TRUE),
+  unit_price = round(runif(n_orders, min = 5, max = 120), 2)
+)
+
+knitr::kable(head(sales), caption = "First six rows of the synthetic dataset")
+```
+
+## Step 3: Clean and prepare
+
+Rows with missing values are removed, then revenue and an order month are added.
+
+```{r clean}
+sales_clean <- sales |>
+  filter(!is.na(units), !is.na(unit_price)) |>
+  mutate(
+    revenue = units * unit_price,
+    month   = format(order_date, "%Y-%m")
+  )
+
+glimpse(sales_clean)
+```
+
+## Step 4: Summarise by region and category
+
+```{r summarise}
+regional_summary <- sales_clean |>
+  group_by(region, category) |>
+  summarise(
+    orders          = n(),
+    total_units     = sum(units),
+    total_revenue   = sum(revenue),
+    avg_order_value = mean(revenue),
+    .groups = "drop"
+  ) |>
+  arrange(region, desc(total_revenue))
+
+knitr::kable(
+  regional_summary,
+  digits = 2,
+  format.args = list(big.mark = ","),
+  caption = "Revenue summary by region and category"
+)
+```
+
+## Step 5: Visualise
+
+```{r plot, fig.cap="Total revenue by region and product category (synthetic data)"}
+revenue_plot <- ggplot(
+  regional_summary,
+  aes(x = region, y = total_revenue, fill = category)
+) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Total Revenue by Region and Category",
+    subtitle = "Synthetic retail sales data",
+    x = "Region",
+    y = "Total revenue ($)",
+    fill = "Category"
+  ) +
+  theme_minimal()
+
+revenue_plot
+```
+
+## Step 6: Save the outputs
+
+This chunk is shown but not run during knitting, so that knitting the document never writes files into the repository. Running the script itself creates both files.
+
+```{r save, eval=FALSE}
+dir.create(output_dir, showWarnings = FALSE)
+
+write.csv(
+  regional_summary,
+  file.path(output_dir, "regional_summary.csv"),
+  row.names = FALSE
+)
+
+ggsave(
+  file.path(output_dir, "revenue_by_region.png"),
+  plot = revenue_plot,
+  width = 8,
+  height = 5,
+  dpi = 150
+)
+```
+
+# How to Run
+
+Run the script from the project root:
+
+```{r run, eval=FALSE}
+source("scripts/sales_summary.R")
+```
+
+Or from a terminal:
+
+```bash
+Rscript scripts/sales_summary.R
+```
+
+# Session Information
+
+```{r session}
+sessionInfo()
+```
